@@ -3,41 +3,40 @@ import pandas as pd
 
 CSV_PATH = "//"ファイルパスをここに記載"//sample_sales_data.csv"
 
-def simple_dtype(s: pd.Series) -> str:
-    # 最小限の型名に統一
-    if pd.api.types.is_datetime64_any_dtype(s): return "datetime"
-    if pd.api.types.is_bool_dtype(s): return "bool"
-    if pd.api.types.is_integer_dtype(s): return "int"
-    if pd.api.types.is_float_dtype(s): return "float"
-    return "string"
-
 def maybe_bool(s: pd.Series) -> bool:
-    # 0/1/true/false/yes/no/はい/いいえ/有/無 のみなら bool とみなす（簡易判定）
-    allowed_true  = {"1","true","t","y","yes","はい","有"}
-    allowed_false = {"0","false","f","n","no","いいえ","無"}
+    true  = {"1","true","t","y","yes","はい","有"}
+    false = {"0","false","f","n","no","いいえ","無"}
     vals = pd.Series(s.dropna().astype(str).str.strip().str.lower().unique())
-    if len(vals) == 0: 
-        return False
-    return set(vals).issubset(allowed_true | allowed_false)
+    return len(vals) > 0 and set(vals).issubset(true | false)
+
+def to_boolean_nullable(s: pd.Series) -> pd.Series:
+    m = s.astype(str).str.strip().str.lower()
+    true  = {"1","true","t","y","yes","はい","有"}
+    false = {"0","false","f","n","no","いいえ","無"}
+    out = pd.Series(pd.NA, index=s.index, dtype="boolean")
+    out = out.mask(m.isin(true), True).mask(m.isin(false), False)
+    return out
 
 def length_class(s: pd.Series) -> str:
-    # 非NULLの文字列表現の長さで判定（数値/日付も文字列化して共通処理）
-    if s.dropna().empty:
-        return "N/A"
-    lens = s.dropna().astype(str).str.len()
-    mn, mx = int(lens.min()), int(lens.max())
-    return f"固定長({mn})" if mn == mx else f"可変長({mn}-{mx})"
+    if s.dropna().empty: return "N/A"
+    l = s.dropna().astype(str).str.len()
+    return f"固定長({int(l.min())})" if l.min()==l.max() else f"可変長({int(l.min())}-{int(l.max())})"
 
 df = pd.read_csv(CSV_PATH, encoding="utf-8-sig")
+
+# ここで“実際に”型変換を適用（最小限）
+if "出荷日" in df.columns:
+    df["出荷日"] = pd.to_datetime(df["出荷日"], errors="coerce")
+for col in df.columns:
+    if maybe_bool(df[col]):
+        df[col] = to_boolean_nullable(df[col])
 
 print("列名\tデータ型\t長さ区分")
 for col in df.columns:
     s = df[col]
-    # 日付は先に解釈（存在すれば）
-    if col == "出荷日":
-        s = pd.to_datetime(s, errors="coerce")
-        dtype_name = "datetime"
-    else:
-        # 簡易bool判定 → それ以外はpandas dtypeベースで丸める
-        dtype_name = "bool" if maybe_bool(s) else simple_dtype(s)
-    print(f"{col}\t{dtype_name}\t{length_class(s)}")
+    if pd.api.types.is_datetime64_any_dtype(s): t = "datetime"
+    elif pd.api.types.is_bool_dtype(s): t = "bool"
+    elif pd.api.types.is_integer_dtype(s): t = "int"
+    elif pd.api.types.is_float_dtype(s): t = "float"
+    else: t = "string"
+    print(f"{col}\t{t}\t{length_class(s)}")
