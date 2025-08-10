@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 
-CSV_PATH = "/Users/tk/SALES _ANALYSIS _EXPR4/sample_sales_data.csv"
+CSV_PATH = "//"ここにファイルパスを記載"//sample_sales_data.csv"
 df = pd.read_csv(CSV_PATH, encoding="utf-8-sig")
 if "出荷日" in df.columns:
     df["出荷日"] = pd.to_datetime(df["出荷日"], errors="coerce")
